@@ -1,0 +1,19 @@
+{
+  "name": "rdio-scanner-cli",
+  "version": "1.0.0",
+  "description": "Command-line client for rdio-scanner - live feed and playback on headless systems",
+  "main": "index.js",
+  "bin": {
+    "rdio-scanner-cli": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "license": "GPL-3.0"
+}

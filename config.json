@@ -1,0 +1,23 @@
+{
+  "_comment": "Rdio Scanner CLI configuration. All fields are optional.",
+
+  "server": "ws://server:3000",
+  "pin": null,
+
+  "systems": null,
+  "talkgroups": null,
+
+  "interactive": false,
+  "search": false,
+  "autoPlay": false,
+
+  "audio": {
+    "noAudio": false,
+    "player": null,
+    "volume": 100
+  },
+
+  "avoidMinutes": 15,
+
+  "plugins": ["./src/plugins/mute-mdc.js"]
+}
