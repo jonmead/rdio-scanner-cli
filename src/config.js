@@ -143,6 +143,7 @@ function mergeConfig(args) {
 
         // Logging — config.json wins over LOG_LEVEL env var, default is 'info'
         logLevel:     cfg.logLevel ?? process.env.LOG_LEVEL ?? 'info',
+        logFilePath:  cfg.logFilePath ?? null,
 
         // Plugins
         plugins,

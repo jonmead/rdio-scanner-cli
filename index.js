@@ -9,11 +9,12 @@
  * server operator and authorized parties.
  */
 
-const { parseArgs, HELP } = require('./src/args');
-const { mergeConfig }     = require('./src/config');
-const { App }             = require('./src/app');
-const { daemonMode }      = require('./src/daemon');
-const log                 = require('./src/logger');
+const { parseArgs, HELP }             = require('./src/args');
+const { mergeConfig }                 = require('./src/config');
+const { App }                         = require('./src/app');
+const { daemonMode }                  = require('./src/daemon');
+const log                             = require('./src/logger');
+const { addFileTransport }            = log;
 
 (function main() {
     const args = mergeConfig(parseArgs(process.argv));
@@ -23,6 +24,9 @@ const log                 = require('./src/logger');
 
     // Apply log level from config (or LOG_LEVEL env var) before any further output.
     log.level = args.logLevel;
+
+    // Start logging to a timestamped file (defaults to cwd if logFilePath not set).
+    addFileTransport(args.logFilePath);
 
     if (!args.url) {
         log.error('Server URL required. Use --help for usage.');
