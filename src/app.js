@@ -84,6 +84,8 @@ class App {
         process.on('SIGTERM', () => this.quit());
         process.on('exit',    () => { if (process.stdout.isTTY) process.stdout.write(SHOWC); });
         process.stdout.on('resize', () => this._schedRender());
+        process.stdout.on('error', (err) => { if (err.code !== 'EIO' && err.code !== 'EPIPE') throw err; });
+        process.stderr.on('error', (err) => { if (err.code !== 'EIO' && err.code !== 'EPIPE') throw err; });
 
         // Load plugins specified on the command line
         for (const p of (this.args.plugins || [])) this.plugins.load(p);
@@ -423,7 +425,7 @@ class App {
         process.stdin.on('data', (k) => {
             if (this._blocking) return;
             if (k === '\x03') { this.quit(); return; }
-            this._handleKey(k);
+            try { this._handleKey(k); } catch (err) { process.stderr.write(`[input] ${err.message}\n`); }
         });
     }
 
@@ -608,7 +610,10 @@ class App {
     // ── Rendering ─────────────────────────────────────────────────────────────
     _schedRender() {
         if (this._renderTmr) return;
-        this._renderTmr = setTimeout(() => { this._renderTmr = null; this.renderer.render(); }, 40);
+        this._renderTmr = setTimeout(() => {
+            this._renderTmr = null;
+            try { this.renderer.render(); } catch (err) { process.stderr.write(`[render] ${err.message}\n`); }
+        }, 40);
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────

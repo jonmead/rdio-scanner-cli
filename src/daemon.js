@@ -103,6 +103,9 @@ function daemonMode(args) {
         });
     });
 
+    process.stdout.on('error', (err) => { if (err.code !== 'EIO' && err.code !== 'EPIPE') throw err; });
+    process.stderr.on('error', (err) => { if (err.code !== 'EIO' && err.code !== 'EPIPE') throw err; });
+
     process.on('SIGINT',  () => { plugins.destroy(); process.exit(0); });
     process.on('SIGTERM', () => { plugins.destroy(); process.exit(0); });
 

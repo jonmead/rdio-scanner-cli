@@ -43,7 +43,14 @@ class AudioPlayer {
         this.stop();
         const ext    = _ext(audioType);
         this.tmpFile = path.join(os.tmpdir(), `rdio-${Date.now()}${ext}`);
-        fs.writeFileSync(this.tmpFile, buf);
+        try {
+            fs.writeFileSync(this.tmpFile, buf);
+        } catch (err) {
+            process.stderr.write(`[audio] Failed to write temp file: ${err.message}\n`);
+            this.tmpFile = null;
+            onEnd?.();
+            return;
+        }
         this.onEndCb = onEnd;
         const args   = this._args(this.tmpFile);
         this.proc    = spawn(this.player, args, { stdio: 'ignore' });
