@@ -96,15 +96,19 @@ The default mode. Runs without a terminal UI — suitable for background service
 {"id":12345,"dateTime":"2026-03-11T14:32:01.000Z","system":1,"systemLabel":"County Fire","talkgroup":100,"tgLabel":"Fireground 3","tgName":"FG3","frequency":155340000,"audioType":"audio/wav"}
 ```
 
-**stderr** receives human-readable status and call summaries:
+**stderr** receives human-readable status and call summaries formatted by winston:
 
 ```
-[config] Loaded /home/pi/rdio-scanner-cli/config.json
-Connected to ws://192.168.1.10:3000
-Config loaded: 3 system(s)
-[CALL] 2026-03-11T14:32:01.000Z  County Fire  Fireground 3  155.3400 MHz
-[CALL] 2026-03-11T14:33:18.000Z  County Fire  Dispatch  154.4300 MHz
+14:32:00 [config] info: Loaded /home/pi/rdio-scanner-cli/config.json
+14:32:01 info: Connected to ws://192.168.1.10:3000
+14:32:01 info: Config loaded: 3 system(s)
+14:32:01 info: [CALL] 2026-03-11T14:32:01.000Z  County Fire  Fireground 3  155.3400 MHz
+14:32:18 info: [CALL] 2026-03-11T14:33:18.000Z  County Fire  Dispatch  154.4300 MHz
 ```
+
+When stderr is a real terminal, the timestamp is dimmed, labels are cyan, and level badges are coloured (green = info, yellow = warn, red = error). When piped to a file the output is plain text with no escape codes.
+
+The log level can be overridden with the `LOG_LEVEL` environment variable (default `info`). Valid values are `error`, `warn`, `info`, `debug`.
 
 Because JSON goes to stdout and logs go to stderr they can be separated cleanly:
 
@@ -388,7 +392,7 @@ Plugins let you attach external behaviour — hardware displays, webhooks, loggi
 
 ### How plugins work
 
-A plugin is a JavaScript file that exports a **class** or a **plain object** implementing any of the event methods below. All methods are optional; implement only what you need. Errors thrown inside a plugin method are caught, logged to stderr, and do not affect other plugins or the application.
+A plugin is a JavaScript file that exports a **class** or a **plain object** implementing any of the event methods below. All methods are optional; implement only what you need. Errors thrown inside a plugin method are caught, logged via the application logger, and do not affect other plugins or the application.
 
 The application supports loading multiple plugins simultaneously.
 
@@ -471,6 +475,21 @@ class MyPlugin {
      * No arguments.
      */
     destroy() {}
+
+    /**
+     * Optional audio processing hook — called before playback for each call.
+     * Only called when the call matches the plugin's monitor filter (if set).
+     *
+     * Receives the raw audio buffer and must return a processed Buffer (or a
+     * Promise<Buffer>). Return null/undefined to pass the buffer through
+     * unchanged. If the method throws or rejects, the original buffer is used.
+     *
+     * @param {Buffer} buf        Raw audio bytes from the server.
+     * @param {string} audioType  MIME type, e.g. "audio/wav".
+     * @param {object} call       Enriched call object (read-only).
+     * @returns {Buffer|Promise<Buffer>|null}
+     */
+    processAudio(buf, audioType, call) {}
 }
 
 module.exports = MyPlugin;
@@ -579,10 +598,80 @@ module.exports = LogToFilePlugin;
 node index.js --plugin ./my-plugins/log-to-file.js
 ```
 
-### Raspberry Pi hardware display
+### Built-in plugins
 
-`src/plugins/rpi-lcd.js` is a ready-to-extend skeleton for hardware displays.
-Open the file, install the npm driver for your hardware, and uncomment the relevant lines.
+#### `src/plugins/mute-mdc.js` — MDC1200 mute
+
+Detects and suppresses MDC1200 signalling bursts — the audible chirps that appear before and after voice transmissions on Motorola systems. Works natively for WAV audio; falls back to ffmpeg for other formats.
+
+```json
+{ "plugins": ["./src/plugins/mute-mdc.js"] }
+```
+
+Configuration via environment variables or subclassing:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MUTE_MDC_SENSITIVITY` | `0.9` | Detection threshold (0–1). Lower = more aggressive. |
+
+To override defaults without env vars, subclass it:
+
+```js
+// my-plugins/mute-mdc-custom.js
+const MuteMdcPlugin = require('../src/plugins/mute-mdc');
+module.exports = class extends MuteMdcPlugin {
+    constructor() { super({ sensitivity: 0.45, attenuationDb: 40 }); }
+};
+```
+
+#### `src/plugins/audio-processor.js` — External audio command
+
+Runs an arbitrary external command on the audio buffer before playback. Use this for normalisation, filtering, re-encoding, or any other processing that can be expressed as a command-line tool.
+
+The command receives two temp-file paths via `{in}` and `{out}` placeholders. It must write processed audio to `{out}` and exit with code 0.
+
+```json
+{
+  "plugins": [
+    {
+      "path": "./src/plugins/audio-processor.js",
+      "monitor": null
+    }
+  ]
+}
+```
+
+Set the command via environment variable:
+
+```bash
+AUDIO_PROCESSOR_CMD="sox {in} {out} norm -3" node index.js
+```
+
+Or subclass for a permanent configuration:
+
+```js
+// my-plugins/normalize.js
+const AudioProcessorPlugin = require('../src/plugins/audio-processor');
+module.exports = class extends AudioProcessorPlugin {
+    constructor() { super({ command: 'sox {in} {out} norm -3', timeout: 5000 }); }
+};
+```
+
+Common command examples:
+
+| Purpose | Command |
+|---------|---------|
+| Normalise volume | `sox {in} {out} norm -3` |
+| Boost volume | `sox {in} {out} vol 1.5` |
+| Noise reduction | `sox {in} {out} noisered profile.noise 0.2` |
+| High-pass filter | `sox {in} {out} highpass 300` |
+| Re-encode via ffmpeg | `ffmpeg -y -i {in} -af loudnorm {out}` |
+
+Multiple processors can be chained by loading two instances in order — each receives the output of the previous one.
+
+#### `src/plugins/rpi-lcd.js` — Raspberry Pi display skeleton
+
+A ready-to-extend skeleton for hardware displays. Open the file, install the npm driver for your hardware, and uncomment the relevant lines.
 
 | Hardware | npm package | Interface |
 |----------|-------------|-----------|
@@ -628,7 +717,8 @@ rdio-scanner-cli/
 ├── CONFIG.md                 Full config.json reference
 └── src/
     ├── args.js               CLI argument parser
-    ├── config.js             Config file loader and CLI/config merge
+    ├── config.js             Config file loader, CLI/config merge, monitor filter helpers
+    ├── logger.js             Winston logger — colourised TTY output, plain text otherwise
     ├── constants.js          WebSocket protocol command constants
     ├── ansi.js               ANSI escape codes and terminal helpers
     ├── audio.js              AudioPlayer — detects player, writes temp file, spawns process
@@ -638,7 +728,9 @@ rdio-scanner-cli/
     ├── app.js                App class — state, input handling, live/search/select logic
     ├── daemon.js             Non-interactive mode — JSON stdout, audio, plugin dispatch
     └── plugins/
-        ├── loader.js         PluginManager — loads files, dispatches events
+        ├── loader.js         PluginManager — loads files, dispatches events, passes logger
+        ├── audio-processor.js  Run an external command on audio before playback
+        ├── mute-mdc.js       Detect and mute MDC1200 signalling bursts
         └── rpi-lcd.js        Raspberry Pi display skeleton
 ```
 

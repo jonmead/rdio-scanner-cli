@@ -317,6 +317,20 @@ See [`src/plugins/rpi-lcd.js`](src/plugins/rpi-lcd.js) for a fully commented ske
 
 ---
 
+---
+
+## Environment variables
+
+These are not part of `config.json` but affect the application at runtime.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LOG_LEVEL` | `info` | Minimum log level for stderr output. Valid values: `error`, `warn`, `info`, `debug`. |
+| `AUDIO_PROCESSOR_CMD` | — | Default command for `audio-processor.js` plugin. Overridden by the subclass constructor option. |
+| `MUTE_MDC_SENSITIVITY` | `0.9` | Detection sensitivity for `mute-mdc.js` plugin (0–1). |
+
+---
+
 ## Minimal configs
 
 **Headless Raspberry Pi with LCD display:**

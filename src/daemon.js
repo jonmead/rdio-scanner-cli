@@ -23,6 +23,8 @@ function daemonMode(args) {
     const audio   = new AudioPlayer(args);
     const plugins = new PluginManager();
     let   systems = [];
+    const queue   = [];
+    let   playing = false;
 
     for (const p of (args.plugins || [])) plugins.load(p);
 
@@ -96,12 +98,26 @@ function daemonMode(args) {
         const ts   = call.dateTime.toISOString();
         log.info(`[CALL] ${ts}  ${sys}  ${tg}  ${freq}`);
 
+        queue.push(call);
+        processQueue();
+    });
+
+    function processQueue() {
+        if (playing || queue.length === 0) return;
+        const call = queue.shift();
+        playing = true;
         plugins.runAudioPipeline(call.audioBuf, call.audioType, call, (processedBuf) => {
             plugins.emit('onCallStart', call);
             if (processedBuf && !args.noAudio) {
-                audio.play(processedBuf, call.audioType, () => plugins.emit('onCallEnd'));
+                audio.play(processedBuf, call.audioType, () => {
+                    plugins.emit('onCallEnd');
+                    playing = false;
+                    processQueue();
+                });
             } else {
                 plugins.emit('onCallEnd');
+                playing = false;
+                processQueue();
             }
         });
     });

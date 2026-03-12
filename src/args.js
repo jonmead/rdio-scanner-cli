@@ -11,8 +11,8 @@ Usage: rdio-scanner-cli <server-url> [options]
 Options:
   -c, --config <path>    Path to config file (default: ./config.json)
   -p, --pin <code>       Access code for restricted servers
-  -s, --system <id>      Pre-filter live feed to system ID
-  -t, --talkgroup <id>   Pre-filter live feed to talkgroup ID
+  -s, --system <id>      Pre-filter search results to system ID
+  -t, --talkgroup <id>   Pre-filter search results to talkgroup ID
       --interactive      Run the full TUI (default: non-interactive / daemon mode)
       --no-audio         Metadata display only, no audio playback
       --player <cmd>     Force a specific audio player (mpv, aplay, afplay, ffplay …)
