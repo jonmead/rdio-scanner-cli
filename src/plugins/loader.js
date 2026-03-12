@@ -42,6 +42,14 @@ class PluginManager {
      */
     load(entry) {
         const pluginPath = typeof entry === 'string' ? entry : entry.path;
+
+        // Object entries can set enabled: false to disable without removing from config.
+        // String entries (e.g. from --plugin CLI) are always enabled.
+        if (typeof entry === 'object' && entry.enabled === false) {
+            log.debug(`Skipped (disabled): ${pluginPath}`);
+            return null;
+        }
+
         const monitorMap = (typeof entry === 'object' && entry.monitor)
             ? buildMonitorMap(entry.monitor)
             : null;

@@ -408,13 +408,14 @@ The application supports loading multiple plugins simultaneously.
     "./my-plugins/webhook.js",
     {
       "path": "./my-plugins/fire-display.js",
+      "enabled": true,
       "monitor": [{ "system": 1, "talkgroups": [100, 200] }]
     }
   ]
 }
 ```
 
-Each plugin can optionally include a `monitor` filter (same format as the top-level `monitor` field) so it only receives calls for specific systems or talkgroups. Lifecycle events (`init`, `onStatus`, `onConfig`, `destroy`) are always delivered regardless of the filter.
+Each plugin can optionally include an `enabled` flag (`false` disables it without removing it from the config) and a `monitor` filter (same format as the top-level `monitor` field) so it only receives calls for specific systems or talkgroups. Lifecycle events (`init`, `onStatus`, `onConfig`, `destroy`) are always delivered regardless of the filter.
 
 **Via CLI** (one-off or additional):
 ```bash

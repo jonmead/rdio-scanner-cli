@@ -366,12 +366,13 @@ Plugins specified via `--plugin` on the command line are **appended** to this li
 ]
 ```
 
-**Object form — restrict a plugin to specific systems or talkgroups:**
+**Object form — restrict a plugin to specific systems or talkgroups, or disable it:**
 ```json
 "plugins": [
   "./src/plugins/mute-mdc.js",
   {
     "path": "./src/plugins/rpi-lcd.js",
+    "enabled": true,
     "monitor": [
       { "system": 1, "talkgroups": [100, 200] },
       { "system": 2 }
@@ -380,7 +381,13 @@ Plugins specified via `--plugin` on the command line are **appended** to this li
 ]
 ```
 
-The `monitor` field uses the same format as the top-level [`monitor`](#monitor) field. Set it to `null` (or omit it) to receive all calls.
+Object-form fields:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `path` | `string` | Yes | Path to the plugin file |
+| `enabled` | `boolean` | No | Set to `false` to disable the plugin without removing it from the config. Defaults to `true`. |
+| `monitor` | `object[] \| null` | No | System/talkgroup filter. Uses the same format as the top-level [`monitor`](#monitor) field. `null` or omitted = receive all calls. |
 
 **Which events are affected by `monitor`:**
 

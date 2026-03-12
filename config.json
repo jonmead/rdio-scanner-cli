@@ -26,10 +26,11 @@
   "logLevel": "info",
 
   "plugins": [
-    "./src/plugins/mute-mdc.js",
+    { "path": "./src/plugins/mute-mdc.js", "enabled": false },
     {
-      "_comment": "Object form: restrict a plugin to specific systems/talkgroups",
+      "_comment": "Object form: restrict a plugin to specific systems/talkgroups, or disable it",
       "path": "./src/plugins/rpi-lcd.js",
+      "enabled": false,
       "monitor": null
     }
   ]
