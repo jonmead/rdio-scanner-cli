@@ -399,10 +399,16 @@ The application supports loading multiple plugins simultaneously.
 {
   "plugins": [
     "./src/plugins/rpi-lcd.js",
-    "./my-plugins/webhook.js"
+    "./my-plugins/webhook.js",
+    {
+      "path": "./my-plugins/fire-display.js",
+      "monitor": [{ "system": 1, "talkgroups": [100, 200] }]
+    }
   ]
 }
 ```
+
+Each plugin can optionally include a `monitor` filter (same format as the top-level `monitor` field) so it only receives calls for specific systems or talkgroups. Lifecycle events (`init`, `onStatus`, `onConfig`, `destroy`) are always delivered regardless of the filter.
 
 **Via CLI** (one-off or additional):
 ```bash
@@ -424,8 +430,12 @@ class MyPlugin {
      *   config.systems        Array of system objects.
      *   config.branding       Server branding string (may be null).
      *   config.time12hFormat  Whether the server prefers 12-hour time.
+     * @param {object} logger  Winston logger instance. Use this for all log
+     *   output so your plugin's messages share the same format and destination
+     *   as the rest of the application. Create a labelled child for clarity:
+     *     this.log = logger.child({ label: 'my-plugin' });
      */
-    init(config) {}
+    init(config, logger) {}
 
     /**
      * Called when a live call begins playing.
@@ -539,12 +549,15 @@ const path = require('path');
 class LogToFilePlugin {
     constructor() {
         this.stream = null;
+        this.log    = null;
     }
 
-    init(config) {
+    init(config, logger) {
+        this.log = logger.child({ label: 'log-to-file' });
         const file = path.resolve('./calls.log');
         this.stream = fs.createWriteStream(file, { flags: 'a' });
         this.stream.write(`--- Started: ${new Date().toISOString()} ---\n`);
+        this.log.info(`Logging calls to ${file}`);
     }
 
     onCallStart(call) {

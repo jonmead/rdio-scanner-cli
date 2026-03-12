@@ -10,6 +10,7 @@
     "start": "node index.js"
   },
   "dependencies": {
+    "winston": "^3.19.0",
     "ws": "^8.18.0"
   },
   "engines": {

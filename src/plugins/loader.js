@@ -2,6 +2,8 @@
 
 const path = require('path');
 const { buildMonitorMap, isMonitored } = require('../config');
+const rootLogger = require('../logger');
+const log        = rootLogger.child({ label: 'plugin' });
 
 /**
  * PluginManager — loads and dispatches events to display plugins.
@@ -50,10 +52,10 @@ class PluginManager {
             const instance = typeof exported === 'function' ? new exported() : exported;
             this._plugins.push({ instance, monitorMap });
             const filterNote = monitorMap ? ` (filtered: ${monitorMap.size} system(s))` : '';
-            process.stderr.write(`[plugin] Loaded: ${resolved}${filterNote}\n`);
+            log.info(`Loaded: ${resolved}${filterNote}`);
             return instance;
         } catch (err) {
-            process.stderr.write(`[plugin] Failed to load ${pluginPath}: ${err.message}\n`);
+            log.error(`Failed to load ${pluginPath}: ${err.message}`);
             return null;
         }
     }
@@ -76,7 +78,7 @@ class PluginManager {
                 try {
                     if (typeof instance.onCallStart === 'function') instance.onCallStart(call);
                 } catch (err) {
-                    process.stderr.write(`[plugin] Error in onCallStart: ${err.message}\n`);
+                    log.error(`Error in onCallStart: ${err.message}`);
                 }
             }
         } else if (event === 'onCallEnd') {
@@ -85,17 +87,22 @@ class PluginManager {
                 try {
                     if (typeof instance.onCallEnd === 'function') instance.onCallEnd();
                 } catch (err) {
-                    process.stderr.write(`[plugin] Error in onCallEnd: ${err.message}\n`);
+                    log.error(`Error in onCallEnd: ${err.message}`);
                 }
             }
             this._callActiveSet.clear();
         } else {
-            // Lifecycle events — always dispatch to all plugins
+            // Lifecycle events — always dispatch to all plugins.
+            // For 'init', append rootLogger as a second argument so plugins can
+            // use it (or create a labelled child) without importing it directly.
             for (const { instance } of this._plugins) {
                 try {
-                    if (typeof instance[event] === 'function') instance[event](...args);
+                    if (typeof instance[event] === 'function') {
+                        const callArgs = event === 'init' ? [...args, rootLogger] : args;
+                        instance[event](...callArgs);
+                    }
                 } catch (err) {
-                    process.stderr.write(`[plugin] Error in ${event}: ${err.message}\n`);
+                    log.error(`Error in ${event}: ${err.message}`);
                 }
             }
         }
@@ -133,14 +140,14 @@ class PluginManager {
                     result
                         .then(newBuf => next(newBuf ?? current))
                         .catch(err  => {
-                            process.stderr.write(`[plugin] processAudio error: ${err.message}\n`);
+                            log.error(`processAudio error: ${err.message}`);
                             next(current);
                         });
                 } else {
                     next(result ?? current);
                 }
             } catch (err) {
-                process.stderr.write(`[plugin] processAudio error: ${err.message}\n`);
+                log.error(`processAudio error: ${err.message}`);
                 next(current);
             }
         };

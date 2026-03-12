@@ -78,6 +78,11 @@ class AudioProcessorPlugin {
     constructor(options = {}) {
         this.command = options.command || process.env.AUDIO_PROCESSOR_CMD || null;
         this.timeout = options.timeout || 10000;
+        this.log     = require('../logger').child({ label: 'audio-processor' });
+    }
+
+    init(config, logger) {
+        this.log = logger.child({ label: 'audio-processor' });
     }
 
     /**
@@ -104,7 +109,7 @@ class AudioProcessorPlugin {
             try {
                 fs.writeFileSync(inFile, buf);
             } catch (err) {
-                process.stderr.write(`[audio-processor] Failed to write input: ${err.message}\n`);
+                this.log.error(`Failed to write input: ${err.message}`);
                 resolve(buf);
                 return;
             }
@@ -121,14 +126,14 @@ class AudioProcessorPlugin {
 
             const timer = setTimeout(() => {
                 try { proc.kill('SIGTERM'); } catch (_) {}
-                process.stderr.write(`[audio-processor] Command timed out after ${this.timeout}ms\n`);
+                this.log.warn(`Command timed out after ${this.timeout}ms`);
                 cleanup();
                 resolve(buf);
             }, this.timeout);
 
             proc.on('error', (err) => {
                 clearTimeout(timer);
-                process.stderr.write(`[audio-processor] Spawn error: ${err.message}\n`);
+                this.log.error(`Spawn error: ${err.message}`);
                 cleanup();
                 resolve(buf);
             });
@@ -141,12 +146,12 @@ class AudioProcessorPlugin {
                         cleanup();
                         resolve(processed);
                     } catch (err) {
-                        process.stderr.write(`[audio-processor] Failed to read output: ${err.message}\n`);
+                        this.log.error(`Failed to read output: ${err.message}`);
                         cleanup();
                         resolve(buf);
                     }
                 } else {
-                    process.stderr.write(`[audio-processor] Command exited ${code} — using original audio\n`);
+                    this.log.warn(`Command exited ${code} — using original audio`);
                     cleanup();
                     resolve(buf);
                 }

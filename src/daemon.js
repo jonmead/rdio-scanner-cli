@@ -5,6 +5,7 @@ const { AudioPlayer } = require('./audio');
 const { RdioClient }  = require('./client');
 const { PluginManager } = require('./plugins/loader');
 const { isMonitored } = require('./config');
+const log = require('./logger');
 
 /**
  * Non-interactive (daemon) mode — the default when --interactive is not given.
@@ -40,20 +41,20 @@ function daemonMode(args) {
     }
 
     client.on('open', () => {
-        process.stderr.write(`Connected to ${args.url}\n`);
+        log.info(`Connected to ${args.url}`);
         plugins.emit('onStatus', true);
         client.send(CMD_VER);
         client.send(CMD_CONFIG);
     });
 
     client.on('close', () => {
-        process.stderr.write('Disconnected. Reconnecting…\n');
+        log.warn('Disconnected. Reconnecting…');
         plugins.emit('onStatus', false);
     });
 
     client.on(CMD_PIN, () => {
         if (args.pin) { client.sendPIN(args.pin); args.pin = null; }
-        else process.stderr.write('Server requires PIN — use --pin\n');
+        else log.warn('Server requires PIN — use --pin');
     });
 
     client.on(CMD_CONFIG, (cfg) => {
@@ -65,7 +66,7 @@ function daemonMode(args) {
                 map[String(sys.id)][String(tg.id)] = isMonitored(args.monitor, sys.id, tg.id);
         }
         client.sendLFM(map);
-        process.stderr.write(`Config loaded: ${systems.length} system(s)\n`);
+        log.info(`Config loaded: ${systems.length} system(s)`);
         plugins.emit('onConfig', systems);
         plugins.emit('init', cfg);
     });
@@ -93,7 +94,7 @@ function daemonMode(args) {
         const tg   = call.talkgroupData?.label || `TG ${call.talkgroup}`;
         const freq = call.frequency ? `${(call.frequency / 1e6).toFixed(4)} MHz` : '';
         const ts   = call.dateTime.toISOString();
-        process.stderr.write(`[CALL] ${ts}  ${sys}  ${tg}  ${freq}\n`);
+        log.info(`[CALL] ${ts}  ${sys}  ${tg}  ${freq}`);
 
         plugins.runAudioPipeline(call.audioBuf, call.audioType, call, (processedBuf) => {
             plugins.emit('onCallStart', call);

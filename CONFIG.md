@@ -270,19 +270,48 @@ How long (in minutes) a system or talkgroup is suppressed after pressing `A` / `
 
 | | |
 |---|---|
-| Type | `string[]` |
+| Type | `(string \| object)[]` |
 | Default | `[]` |
-| CLI equivalent | `--plugin <path>` (may repeat) |
+| CLI equivalent | `--plugin <path>` (may repeat, string only) |
 
-List of display plugin file paths to load at startup. Paths are resolved relative to the current working directory.
+List of plugins to load at startup. Each entry is either a plain path string or an object with a `path` and an optional `monitor` filter.
 
-Plugins specified via `--plugin` on the command line are **appended** to this list (not a replacement). Duplicate paths are silently ignored.
+Plugins specified via `--plugin` on the command line are **appended** to this list (not a replacement). Duplicate paths are silently ignored; the first occurrence (config file) wins.
 
+**Plain string — no filter, receives all calls:**
 ```json
 "plugins": [
-  "./src/plugins/rpi-lcd.js"
+  "./src/plugins/mute-mdc.js"
 ]
 ```
+
+**Object form — restrict a plugin to specific systems or talkgroups:**
+```json
+"plugins": [
+  "./src/plugins/mute-mdc.js",
+  {
+    "path": "./src/plugins/rpi-lcd.js",
+    "monitor": [
+      { "system": 1, "talkgroups": [100, 200] },
+      { "system": 2 }
+    ]
+  }
+]
+```
+
+The `monitor` field uses the same format as the top-level [`monitor`](#monitor) field. Set it to `null` (or omit it) to receive all calls.
+
+**Which events are affected by `monitor`:**
+
+| Event | Filtered by `monitor`? |
+|-------|------------------------|
+| `init` | No — always called |
+| `onStatus` | No — always called |
+| `onConfig` | No — always called |
+| `destroy` | No — always called |
+| `onCallStart` | Yes — only called when the call matches the filter |
+| `onCallEnd` | Yes — only called if `onCallStart` was called for this call |
+| `processAudio` | Yes — only called when the call matches the filter |
 
 See [`src/plugins/rpi-lcd.js`](src/plugins/rpi-lcd.js) for a fully commented skeleton and [`src/plugins/loader.js`](src/plugins/loader.js) for the plugin interface.
 

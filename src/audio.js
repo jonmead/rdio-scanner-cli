@@ -4,6 +4,7 @@ const fs   = require('fs');
 const os   = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
+const log  = require('./logger').child({ label: 'audio' });
 
 function _ext(t) {
     if (!t) return '.wav';
@@ -46,7 +47,7 @@ class AudioPlayer {
         try {
             fs.writeFileSync(this.tmpFile, buf);
         } catch (err) {
-            process.stderr.write(`[audio] Failed to write temp file: ${err.message}\n`);
+            log.error(`Failed to write temp file: ${err.message}`);
             this.tmpFile = null;
             onEnd?.();
             return;

@@ -10,6 +10,7 @@ const { RdioClient }   = require('./client');
 const { Renderer }     = require('./renderer');
 const { PluginManager } = require('./plugins/loader');
 const { isMonitored }  = require('./config');
+const log              = require('./logger');
 
 class App {
     constructor(args) {
@@ -426,7 +427,7 @@ class App {
         process.stdin.on('data', (k) => {
             if (this._blocking) return;
             if (k === '\x03') { this.quit(); return; }
-            try { this._handleKey(k); } catch (err) { process.stderr.write(`[input] ${err.message}\n`); }
+            try { this._handleKey(k); } catch (err) { log.error(`[input] ${err.message}`); }
         });
     }
 
@@ -613,7 +614,7 @@ class App {
         if (this._renderTmr) return;
         this._renderTmr = setTimeout(() => {
             this._renderTmr = null;
-            try { this.renderer.render(); } catch (err) { process.stderr.write(`[render] ${err.message}\n`); }
+            try { this.renderer.render(); } catch (err) { log.error(`[render] ${err.message}`); }
         }, 40);
     }
 
@@ -623,7 +624,7 @@ class App {
         this.client?.disconnect();
         this.plugins.destroy();
         if (process.stdout.isTTY) process.stdout.write(SHOWC + CLS);
-        console.log('Goodbye.');
+        log.info('Goodbye.');
         process.exit(0);
     }
 }

@@ -64,7 +64,8 @@ class RpiDisplayPlugin {
      *
      * @param {{ systems: Array }} config  Raw server config object.
      */
-    init(config) {
+    init(config, logger) {
+        this.log = logger ? logger.child({ label: 'rpi-lcd' }) : require('../logger').child({ label: 'rpi-lcd' });
         // ── HD44780 via lcd npm (GPIO pins) ───────────────────────────────────
         // this.display = new Lcd({
         //     rs: 25, e: 24, data: [23, 17, 21, 22],
@@ -168,7 +169,7 @@ class RpiDisplayPlugin {
 
         // ── HD44780 via lcd npm ───────────────────────────────────────────────
         // this.display.setCursor(0, row);
-        // this.display.print(padded, (err) => { if (err) process.stderr.write(`[rpi-lcd] ${err.message}\n`); });
+        // this.display.print(padded, (err) => { if (err) this.log.error(err.message); });
 
         // ── SSD1306 OLED via oled-i2c-bus ────────────────────────────────────
         // const y = row * 10;   // 10 px per row for 5×7 font with 3 px gap

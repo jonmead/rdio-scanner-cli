@@ -19,5 +19,12 @@
 
   "avoidMinutes": 15,
 
-  "plugins": ["./src/plugins/mute-mdc.js"]
+  "plugins": [
+    "./src/plugins/mute-mdc.js",
+    {
+      "_comment": "Object form: restrict a plugin to specific systems/talkgroups",
+      "path": "./src/plugins/rpi-lcd.js",
+      "monitor": null
+    }
+  ]
 }

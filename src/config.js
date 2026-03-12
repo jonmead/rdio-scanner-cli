@@ -2,6 +2,7 @@
 
 const fs   = require('fs');
 const path = require('path');
+const log  = require('./logger').child({ label: 'config' });
 
 /**
  * Build a lookup structure from the monitor config array.
@@ -62,10 +63,10 @@ function readConfigFile(configPath) {
         if (!fs.existsSync(p)) continue;
         try {
             const data = JSON.parse(fs.readFileSync(p, 'utf8'));
-            process.stderr.write(`[config] Loaded ${p}\n`);
+            log.info(`Loaded ${p}`);
             return { data, path: p };
         } catch (err) {
-            process.stderr.write(`[config] Failed to parse ${p}: ${err.message}\n`);
+            log.error(`Failed to parse ${p}: ${err.message}`);
         }
     }
 
@@ -87,12 +88,15 @@ function mergeConfig(args) {
     const { data: cfg } = readConfigFile(args.config);
     const audio = cfg.audio || {};
 
-    // Plugins: config.json entries first, then any additional --plugin CLI args.
-    // Deduplicated so specifying the same path twice has no effect.
-    const plugins = [...new Set([
-        ...(cfg.plugins || []),
-        ...(args.plugins || []),
-    ])];
+    // Plugins: config.json entries first (may be strings or { path, monitor } objects),
+    // then any additional --plugin CLI args (always strings). Deduplicated by path so
+    // specifying the same path twice has no effect; the first occurrence wins.
+    const pluginMap = new Map();
+    for (const entry of [...(cfg.plugins || []), ...(args.plugins || [])]) {
+        const p = typeof entry === 'string' ? entry : entry.path;
+        if (p && !pluginMap.has(p)) pluginMap.set(p, entry);
+    }
+    const plugins = [...pluginMap.values()];
 
     return {
         // Connection
@@ -124,4 +128,4 @@ function mergeConfig(args) {
     };
 }
 
-module.exports = { mergeConfig, isMonitored };
+module.exports = { mergeConfig, buildMonitorMap, isMonitored };

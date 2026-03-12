@@ -259,6 +259,11 @@ class MuteMdcPlugin {
         this.chirpChunks   = options.chirpChunks   ?? 2;
         this.muteExtension = options.muteExtension ?? 12;
         this.attenuationDb = options.attenuationDb ?? 50;
+        this.log           = require('../logger').child({ label: 'mute-mdc' });
+    }
+
+    init(config, logger) {
+        this.log = logger.child({ label: 'mute-mdc' });
     }
 
     /**
@@ -348,7 +353,7 @@ class MuteMdcPlugin {
                 try {
                     processedWav = this._processWav(wavBuf);
                 } catch (err) {
-                    process.stderr.write(`[mute-mdc] Processing error: ${err.message}\n`);
+                    this.log.error(`Processing error: ${err.message}`);
                     resolve(buf);
                     return;
                 }
