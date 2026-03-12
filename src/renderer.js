@@ -123,7 +123,7 @@ class Renderer {
                 ).join('  ');
                 const inlineRaw = inline.replace(/\x1b\[[0-9;]*m/g, '');
                 if (inlineRaw.length <= W - 2 && row < dynEnd) {
-                    writeat(row++, ` ${inline}`);
+                    writeat(row, ` ${inline}`);
                 } else {
                     for (const f of freqs) {
                         if (row >= dynEnd) break;
@@ -139,15 +139,15 @@ class Renderer {
         } else {
             if (app.needPin) {
                 writeat(row++, ` ${YEL}Server requires an access code.${R}`);
-                writeat(row++, ` Press ${BOLD}Enter${R} or wait for the prompt below.`);
+                writeat(row,   ` Press ${BOLD}Enter${R} or wait for the prompt below.`);
             } else if (app.expired) {
-                writeat(row++, ` ${RED}Access code has expired.${R}`);
+                writeat(row, ` ${RED}Access code has expired.${R}`);
             } else if (app.tooMany) {
-                writeat(row++, ` ${RED}Too many concurrent connections.${R}`);
+                writeat(row, ` ${RED}Too many concurrent connections.${R}`);
             } else if (!app.connected) {
-                writeat(row++, ` ${DIM}Connecting…${R}`);
+                writeat(row, ` ${DIM}Connecting…${R}`);
             } else {
-                writeat(row++, ` ${DIM}Waiting for calls…${R}`);
+                writeat(row, ` ${DIM}Waiting for calls…${R}`);
             }
         }
 
@@ -270,7 +270,7 @@ class Renderer {
     }
 
     // ── Shared header ─────────────────────────────────────────────────────────
-    _renderHeader(row, W) {
+    _renderHeader(row) {
         const app    = this.app;
         const title  = `${BOLD}${CYAN} RDIO SCANNER CLI${R}`;
         const brand  = app.branding ? ` — ${app.branding}` : '';

@@ -7,6 +7,9 @@
   "_comment_monitor": "monitor: which system/talkgroup pairs to subscribe to. null = receive everything. Each entry requires 'system' (ID). 'talkgroups' is optional — omit it to receive all talkgroups in that system. Talkgroup IDs are scoped to their system, so the same ID on different systems is handled correctly.",
   "monitor": null,
 
+  "_comment_monitorExclude": "monitorExclude: system/talkgroup pairs to exclude from monitoring. Same structure as monitor. Applied after monitor — entries here are removed from whatever monitor includes. null = exclude nothing.",
+  "monitorExclude": null,
+
   "interactive": false,
   "search": false,
   "autoPlay": false,
@@ -18,6 +21,9 @@
   },
 
   "avoidMinutes": 15,
+
+  "_comment_logLevel": "logLevel: minimum log level for stderr output. Valid values: error, warn, info, debug. Can also be set via the LOG_LEVEL environment variable (config takes precedence).",
+  "logLevel": "info",
 
   "plugins": [
     "./src/plugins/mute-mdc.js",

@@ -4,7 +4,7 @@ const { CMD_CALL, CMD_CONFIG, CMD_PIN, CMD_VER } = require('./constants');
 const { AudioPlayer } = require('./audio');
 const { RdioClient }  = require('./client');
 const { PluginManager } = require('./plugins/loader');
-const { isMonitored } = require('./config');
+const { isMonitored, isExcluded, formatMonitorSummary, formatExcludeSummary } = require('./config');
 const log = require('./logger');
 
 /**
@@ -65,10 +65,35 @@ function daemonMode(args) {
         for (const sys of systems) {
             map[String(sys.id)] = {};
             for (const tg of (sys.talkgroups || []))
-                map[String(sys.id)][String(tg.id)] = isMonitored(args.monitor, sys.id, tg.id);
+                map[String(sys.id)][String(tg.id)] =
+                    isMonitored(args.monitor, sys.id, tg.id) &&
+                    !isExcluded(args.monitorExclude, sys.id, tg.id);
         }
         client.sendLFM(map);
         log.info(`Config loaded: ${systems.length} system(s)`);
+        log.info(`Monitor: ${formatMonitorSummary(args.monitor)}`);
+        log.info(`Exclude: ${formatExcludeSummary(args.monitorExclude)}`);
+
+        // Per-system subscription detail at debug level
+        for (const sys of systems) {
+            const tgs     = sys.talkgroups || [];
+            const active  = tgs.filter(tg =>
+                isMonitored(args.monitor, sys.id, tg.id) &&
+                !isExcluded(args.monitorExclude, sys.id, tg.id)
+            );
+            const skipped = tgs.length - active.length;
+            if (active.length === 0) {
+                log.debug(`  System ${sys.id} (${sys.label || 'unknown'}): skipped (not in monitor filter)`);
+            } else if (skipped > 0) {
+                log.debug(`  System ${sys.id} (${sys.label || 'unknown'}): ${active.length}/${tgs.length} talkgroups active — ${skipped} filtered out`);
+                for (const tg of active) {
+                    log.debug(`    TG ${tg.id} (${tg.label || tg.name || 'unknown'})`);
+                }
+            } else {
+                log.debug(`  System ${sys.id} (${sys.label || 'unknown'}): all ${tgs.length} talkgroups active`);
+            }
+        }
+
         plugins.emit('onConfig', systems);
         plugins.emit('init', cfg);
     });
@@ -99,6 +124,7 @@ function daemonMode(args) {
         log.info(`[CALL] ${ts}  ${sys}  ${tg}  ${freq}`);
 
         queue.push(call);
+        log.debug(`Call queued (queue depth: ${queue.length})`);
         processQueue();
     });
 
@@ -106,6 +132,7 @@ function daemonMode(args) {
         if (playing || queue.length === 0) return;
         const call = queue.shift();
         playing = true;
+        log.debug(`Starting playback (${queue.length} call(s) remaining in queue)`);
         plugins.runAudioPipeline(call.audioBuf, call.audioType, call, (processedBuf) => {
             plugins.emit('onCallStart', call);
             if (processedBuf && !args.noAudio) {
@@ -120,7 +147,7 @@ function daemonMode(args) {
                 processQueue();
             }
         });
-    });
+    }
 
     process.stdout.on('error', (err) => { if (err.code !== 'EIO' && err.code !== 'EPIPE') throw err; });
     process.stderr.on('error', (err) => { if (err.code !== 'EIO' && err.code !== 'EPIPE') throw err; });

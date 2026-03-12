@@ -165,7 +165,7 @@ class RpiDisplayPlugin {
      */
     _writeLine(row, text) {
         if (!this.display) return;
-        const padded = String(text ?? '').slice(0, COLS).padEnd(COLS, ' ');
+        const padded = String(text ?? '').slice(0, COLS).padEnd(COLS, ' '); // eslint-disable-line no-unused-vars
 
         // ── HD44780 via lcd npm ───────────────────────────────────────────────
         // this.display.setCursor(0, row);

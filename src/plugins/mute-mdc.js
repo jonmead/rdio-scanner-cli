@@ -276,7 +276,7 @@ class MuteMdcPlugin {
      * @param   {object} call      Enriched call object (not used; available if needed).
      * @returns {Promise<Buffer>|Buffer}
      */
-    processAudio(buf, audioType, call) {
+    processAudio(buf, audioType, _call) {
         if (!buf) return buf;
 
         if (!audioType || audioType.includes('wav')) {

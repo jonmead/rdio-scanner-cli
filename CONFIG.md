@@ -36,6 +36,10 @@ For `plugins`, the two lists are **merged** (config entries first, CLI entries a
     { "system": 2 }
   ],
 
+  "monitorExclude": [
+    { "system": 2, "talkgroups": [999] }
+  ],
+
   "interactive": false,
   "search": false,
   "autoPlay": false,
@@ -47,6 +51,8 @@ For `plugins`, the two lists are **merged** (config entries first, CLI entries a
   },
 
   "avoidMinutes": 15,
+
+  "logLevel": "info",
 
   "plugins": [
     "./src/plugins/rpi-lcd.js"
@@ -141,6 +147,56 @@ Subscribe to all talkgroups on system 3 only:
 Subscribe to everything (default):
 ```json
 "monitor": null
+```
+
+---
+
+### `monitorExclude`
+
+| | |
+|---|---|
+| Type | `object[] \| null` |
+| Default | `null` (exclude nothing) |
+| CLI equivalent | none — config-only |
+
+Explicitly removes system/talkgroup combinations from monitoring. Uses the same structure as [`monitor`](#monitor). Applied **after** `monitor` — anything matched here is removed from whatever `monitor` includes.
+
+Set to `null` (or omit the field) to exclude nothing.
+
+```json
+"monitorExclude": [
+  { "system": 2, "talkgroups": [999, 1000] },
+  { "system": 3 }
+]
+```
+
+Each entry:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `system` | `number` | Yes | Numeric system ID |
+| `talkgroups` | `number[]` | No | Talkgroup IDs to exclude within this system. Omit (or set to `null`) to exclude **all** talkgroups in the system. |
+
+**How `monitor` and `monitorExclude` interact:**
+
+| `monitor` | `monitorExclude` | Result |
+|-----------|------------------|--------|
+| `null` | `null` | All systems, all talkgroups |
+| `null` | `[{system:2}]` | Everything except all of system 2 |
+| `[{system:1}]` | `null` | Only system 1 (all talkgroups) |
+| `[{system:1}]` | `[{system:1, talkgroups:[99]}]` | System 1, all talkgroups except 99 |
+| `[{system:2}]` | `[{system:1}]` | System 2 only (exclude has no effect — system 1 was already not included) |
+
+**Example — subscribe to systems 1 and 2, but skip talkgroup 99 on system 1:**
+```json
+"monitor": [{ "system": 1 }, { "system": 2 }],
+"monitorExclude": [{ "system": 1, "talkgroups": [99] }]
+```
+
+**Example — subscribe to everything except system 3:**
+```json
+"monitor": null,
+"monitorExclude": [{ "system": 3 }]
 ```
 
 ---
@@ -262,6 +318,31 @@ How long (in minutes) a system or talkgroup is suppressed after pressing `A` / `
 
 ```json
 "avoidMinutes": 30
+```
+
+---
+
+### `logLevel`
+
+| | |
+|---|---|
+| Type | `string` |
+| Default | `"info"` |
+| CLI equivalent | none — use `LOG_LEVEL` env var for one-off overrides |
+
+Minimum severity level for log output to stderr. Messages below this level are suppressed.
+
+| Value | Output |
+|-------|--------|
+| `"error"` | Errors only |
+| `"warn"` | Errors and warnings |
+| `"info"` | Normal operational messages (default) |
+| `"debug"` | Verbose output — connection details, queue depth, playback events, mode switches |
+
+The `LOG_LEVEL` environment variable is also read at startup. The config file value takes precedence over the environment variable.
+
+```json
+"logLevel": "debug"
 ```
 
 ---

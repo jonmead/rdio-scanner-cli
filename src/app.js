@@ -4,12 +4,12 @@ const readline = require('readline');
 
 const { CMD_CALL, CMD_CONFIG, CMD_EXPIRED, CMD_LIST, CMD_LSC,
         CMD_LFM, CMD_MAX, CMD_PIN, CMD_VER } = require('./constants');
-const { R, BOLD, YEL, CLS, HIDEC, SHOWC, goto, CLRL } = require('./ansi');
+const { R, YEL, CLS, HIDEC, SHOWC, goto, CLRL } = require('./ansi');
 const { AudioPlayer }  = require('./audio');
 const { RdioClient }   = require('./client');
 const { Renderer }     = require('./renderer');
 const { PluginManager } = require('./plugins/loader');
-const { isMonitored }  = require('./config');
+const { isMonitored, isExcluded, formatMonitorSummary, formatExcludeSummary } = require('./config');
 const log              = require('./logger');
 
 class App {
@@ -144,6 +144,18 @@ class App {
         this.branding = cfg.branding || this.branding;
         this.needPin  = false;
 
+        log.info(`Config loaded: ${this.systems.length} system(s)`);
+        log.info(`Monitor: ${formatMonitorSummary(this.args.monitor)}`);
+        log.info(`Exclude: ${formatExcludeSummary(this.args.monitorExclude)}`);
+        for (const sys of this.systems) {
+            const tgs    = sys.talkgroups || [];
+            const active = tgs.filter(tg =>
+                isMonitored(this.args.monitor, sys.id, tg.id) &&
+                !isExcluded(this.args.monitorExclude, sys.id, tg.id)
+            ).length;
+            log.debug(`  System ${sys.id} (${sys.label || 'unknown'}): ${active}/${tgs.length} talkgroups active`);
+        }
+
         this._buildLFMap();
         this.plugins.emit('onConfig', this.systems);
         this.plugins.emit('init', cfg);
@@ -242,7 +254,8 @@ class App {
         for (const sys of this.systems) {
             map[String(sys.id)] = {};
             for (const tg of (sys.talkgroups || [])) {
-                let active = isMonitored(this.args.monitor, sys.id, tg.id);
+                let active = isMonitored(this.args.monitor, sys.id, tg.id) &&
+                             !isExcluded(this.args.monitorExclude, sys.id, tg.id);
                 if (this.holdSys !== null && sys.id !== this.holdSys) active = false;
                 if (this.holdTg  !== null && tg.id  !== this.holdTg)  active = false;
                 if (this._isAvoidedSysTg(sys.id, tg.id))              active = false;
@@ -378,12 +391,14 @@ class App {
     _holdSys(sysId) {
         this.holdSys = (this.holdSys === sysId) ? null : sysId;
         this.holdTg  = null;
+        log.debug(this.holdSys !== null ? `Hold system: ${sysId}` : 'System hold cleared');
         this._activateLF();
         this._schedRender();
     }
 
     _holdTg(tgId) {
         this.holdTg = (this.holdTg === tgId) ? null : tgId;
+        log.debug(this.holdTg !== null ? `Hold talkgroup: ${tgId}` : 'Talkgroup hold cleared');
         this._activateLF();
         this._schedRender();
     }
@@ -391,6 +406,7 @@ class App {
     _avoidTg(call) {
         if (!call) return;
         const until = Date.now() + this.args.avoidMinutes * 60000;
+        log.info(`Avoiding talkgroup ${call.talkgroup} (system ${call.system}) for ${this.args.avoidMinutes} min`);
         this.avoidList.push({ system: call.system, talkgroup: call.talkgroup, until });
         this._activateLF();
         this._skipCall();
@@ -399,6 +415,7 @@ class App {
     _avoidSys(call) {
         if (!call) return;
         const until = Date.now() + this.args.avoidMinutes * 60000;
+        log.info(`Avoiding system ${call.system} for ${this.args.avoidMinutes} min`);
         this.avoidList.push({ system: call.system, talkgroup: null, until });
         this._activateLF();
         this._skipCall();
@@ -515,12 +532,14 @@ class App {
     }
 
     _switchLive() {
+        log.debug('Mode: live');
         this.mode = 'live';
         this._activateLF();
         this._schedRender();
     }
 
     _switchSearch() {
+        log.debug('Mode: search');
         this.mode = 'search';
         this._deactivateLF();
         this._runSearch();
@@ -528,6 +547,7 @@ class App {
     }
 
     _switchSelect() {
+        log.debug('Mode: select');
         this.mode = 'select';
         this._deactivateLF();
         this._schedRender();

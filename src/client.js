@@ -2,6 +2,7 @@
 
 const WebSocket = require('ws');
 const { CMD_CALL, CMD_LFM, CMD_LIST, CMD_PIN } = require('./constants');
+const log = require('./logger').child({ label: 'ws' });
 
 class RdioClient {
     constructor(url) {
@@ -15,10 +16,11 @@ class RdioClient {
 
     connect() {
         if (this.ws) { try { this.ws.terminate(); } catch (_) {} }
+        log.debug(`Connecting to ${this.url}`);
         this.ws = new WebSocket(this.url);
         this.ws.on('open',    ()    => { this.alive = true;  this._emit('open'); });
         this.ws.on('close',   ()    => { this.alive = false; this._emit('close'); this._reconnect(); });
-        this.ws.on('error',   (e)   => this._emit('error', e));
+        this.ws.on('error',   (e)   => { log.debug(`WebSocket error: ${e.message}`); this._emit('error', e); });
         this.ws.on('message', (raw) => {
             try {
                 const msg = JSON.parse(raw.toString());
@@ -51,6 +53,7 @@ class RdioClient {
 
     _reconnect() {
         if (this._retry) return;
+        log.debug('Reconnecting in 2s…');
         this._retry = setTimeout(() => { this._retry = null; this.connect(); }, 2000);
     }
 

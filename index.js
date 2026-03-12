@@ -13,6 +13,7 @@ const { parseArgs, HELP } = require('./src/args');
 const { mergeConfig }     = require('./src/config');
 const { App }             = require('./src/app');
 const { daemonMode }      = require('./src/daemon');
+const log                 = require('./src/logger');
 
 (function main() {
     const args = mergeConfig(parseArgs(process.argv));
@@ -20,9 +21,11 @@ const { daemonMode }      = require('./src/daemon');
     if (args.version) { console.log('Rdio Scanner CLI v1.0.0'); process.exit(0); }
     if (args.help)    { console.log(HELP); process.exit(0); }
 
+    // Apply log level from config (or LOG_LEVEL env var) before any further output.
+    log.level = args.logLevel;
+
     if (!args.url) {
-        console.error('Error: server URL required.\n');
-        console.error(HELP);
+        log.error('Server URL required. Use --help for usage.');
         process.exit(1);
     }
 
@@ -31,6 +34,11 @@ const { daemonMode }      = require('./src/daemon');
     else if (args.url.startsWith('https://')) args.url = args.url.replace('https://', 'wss://');
     else if (!args.url.startsWith('ws://') && !args.url.startsWith('wss://'))
         args.url = 'ws://' + args.url;
+
+    const mode = args.interactive ? 'interactive' : 'daemon';
+    log.info(`Rdio Scanner CLI v1.0.0 starting (${mode} mode)`);
+    log.debug(`Server: ${args.url}`);
+    log.debug(`Log level: ${args.logLevel}`);
 
     if (args.interactive) {
         new App(args).start();

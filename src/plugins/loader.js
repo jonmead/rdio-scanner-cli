@@ -51,8 +51,18 @@ class PluginManager {
             const exported = require(resolved);
             const instance = typeof exported === 'function' ? new exported() : exported;
             this._plugins.push({ instance, monitorMap });
-            const filterNote = monitorMap ? ` (filtered: ${monitorMap.size} system(s))` : '';
-            log.info(`Loaded: ${resolved}${filterNote}`);
+            log.info(`Loaded: ${resolved}`);
+            if (monitorMap) {
+                for (const [sysId, tgs] of monitorMap) {
+                    if (tgs === null) {
+                        log.info(`  → system ${sysId}: all talkgroups`);
+                    } else {
+                        log.info(`  → system ${sysId}: talkgroups [${[...tgs].join(', ')}]`);
+                    }
+                }
+            } else {
+                log.debug('  → no monitor filter (receives all calls)');
+            }
             return instance;
         } catch (err) {
             log.error(`Failed to load ${pluginPath}: ${err.message}`);

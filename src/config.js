@@ -48,6 +48,22 @@ function isMonitored(monitorMap, sysId, tgId) {
     return tgs.has(Number(tgId));                        // specific talkgroup check
 }
 
+/**
+ * Returns true if the given (sysId, tgId) pair is excluded from monitoring.
+ *
+ * Counterpart to isMonitored: null means "exclude nothing" (opposite of
+ * isMonitored where null means "include everything").
+ *
+ * @param {Map|null} excludeMap  Result of buildMonitorMap() for monitorExclude; null = nothing excluded.
+ * @param {number}   sysId
+ * @param {number}   tgId
+ * @returns {boolean}
+ */
+function isExcluded(excludeMap, sysId, tgId) {
+    if (!excludeMap) return false;                       // no exclusions configured
+    return isMonitored(excludeMap, sysId, tgId);         // reuse include logic for exclude map
+}
+
 // Locations checked for config.json when no --config path is given.
 const DEFAULT_SEARCH_PATHS = [
     path.resolve(process.cwd(), 'config.json'),
@@ -105,8 +121,10 @@ function mergeConfig(args) {
 
         // Filtering
         // monitor: Map built from config.json "monitor" array; null = receive everything.
+        // monitorExclude: Map built from config.json "monitorExclude" array; null = exclude nothing.
         // system / talkgroup: single-ID CLI filters used for search mode only.
-        monitor:      buildMonitorMap(cfg.monitor ?? null),
+        monitor:        buildMonitorMap(cfg.monitor        ?? null),
+        monitorExclude: buildMonitorMap(cfg.monitorExclude ?? null),
         system:       args.system      ?? cfg.system      ?? null,
         talkgroup:    args.talkgroup   ?? cfg.talkgroup   ?? null,
 
@@ -123,9 +141,46 @@ function mergeConfig(args) {
         // Behaviour
         avoidMinutes: args.avoidMinutes ?? cfg.avoidMinutes ?? 15,
 
+        // Logging — config.json wins over LOG_LEVEL env var, default is 'info'
+        logLevel:     cfg.logLevel ?? process.env.LOG_LEVEL ?? 'info',
+
         // Plugins
         plugins,
     };
 }
 
-module.exports = { mergeConfig, buildMonitorMap, isMonitored };
+/**
+ * Format a monitor map as a concise human-readable string for log output.
+ * Returns 'all systems' when monitorMap is null (no filter).
+ *
+ * @param {Map|null} monitorMap  Result of buildMonitorMap().
+ * @returns {string}
+ */
+function formatMonitorSummary(monitorMap) {
+    if (!monitorMap) return 'all systems (no filter)';
+    if (monitorMap.size === 0) return 'nothing (empty monitor list)';
+    return [...monitorMap.entries()].map(([sysId, tgs]) =>
+        tgs === null
+            ? `system ${sysId} (all talkgroups)`
+            : `system ${sysId} (talkgroups: ${[...tgs].join(', ')})`
+    ).join('; ');
+}
+
+/**
+ * Format a monitorExclude map as a concise human-readable string for log output.
+ * Returns 'none' when excludeMap is null (nothing excluded).
+ *
+ * @param {Map|null} excludeMap  Result of buildMonitorMap() for monitorExclude.
+ * @returns {string}
+ */
+function formatExcludeSummary(excludeMap) {
+    if (!excludeMap) return 'none';
+    if (excludeMap.size === 0) return 'none (empty exclude list)';
+    return [...excludeMap.entries()].map(([sysId, tgs]) =>
+        tgs === null
+            ? `system ${sysId} (all talkgroups)`
+            : `system ${sysId} (talkgroups: ${[...tgs].join(', ')})`
+    ).join('; ');
+}
+
+module.exports = { mergeConfig, buildMonitorMap, isMonitored, isExcluded, formatMonitorSummary, formatExcludeSummary };

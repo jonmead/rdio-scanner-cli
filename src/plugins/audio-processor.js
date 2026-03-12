@@ -96,7 +96,7 @@ class AudioProcessorPlugin {
      * @param   {object} call       Enriched call object (read-only; do not mutate).
      * @returns {Promise<Buffer>}   Processed audio bytes.
      */
-    processAudio(buf, audioType, call) {
+    processAudio(buf, audioType, _call) {
         if (!this.command || !buf) return buf;
 
         const ext     = _ext(audioType);

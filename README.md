@@ -69,8 +69,10 @@ CLI arguments override config file values. See [CONFIG.md](CONFIG.md) for the fu
     { "system": 1, "talkgroups": [100, 200] },
     { "system": 2 }
   ],
+  "monitorExclude": null,
   "interactive": false,
   "audio": { "volume": 80 },
+  "logLevel": "info",
   "plugins": ["./src/plugins/rpi-lcd.js"]
 }
 ```
@@ -108,7 +110,7 @@ The default mode. Runs without a terminal UI — suitable for background service
 
 When stderr is a real terminal, the timestamp is dimmed, labels are cyan, and level badges are coloured (green = info, yellow = warn, red = error). When piped to a file the output is plain text with no escape codes.
 
-The log level can be overridden with the `LOG_LEVEL` environment variable (default `info`). Valid values are `error`, `warn`, `info`, `debug`.
+The log level defaults to `info`. Set `"logLevel"` in `config.json` or the `LOG_LEVEL` environment variable to change it. Valid values are `error`, `warn`, `info`, `debug`. The config file takes precedence over the environment variable.
 
 Because JSON goes to stdout and logs go to stderr they can be separated cleanly:
 

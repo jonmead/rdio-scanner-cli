@@ -24,6 +24,14 @@ class AudioPlayer {
         this.proc    = null;
         this.tmpFile = null;
         this.onEndCb = null;
+
+        if (this.noAudio) {
+            log.info('Audio disabled (--no-audio)');
+        } else if (this.player) {
+            log.info(`Audio player: ${this.player} (volume: ${this.volume}%)`);
+        } else {
+            log.warn('No audio player found on PATH — playback will be silent. Install mpv, ffplay, or aplay.');
+        }
     }
 
     _detect() {
@@ -41,6 +49,7 @@ class AudioPlayer {
 
     play(buf, audioType, onEnd) {
         if (this.noAudio || !this.player || !buf) { onEnd?.(); return; }
+        log.debug(`Playing ${_ext(audioType)} audio (${buf.length} bytes)`);
         this.stop();
         const ext    = _ext(audioType);
         this.tmpFile = path.join(os.tmpdir(), `rdio-${Date.now()}${ext}`);
@@ -76,6 +85,7 @@ class AudioPlayer {
             try { fs.unlinkSync(this.tmpFile); } catch (_) {}
             this.tmpFile = null;
         }
+        log.debug('Playback finished');
         const cb = this.onEndCb;
         this.onEndCb = null;
         cb?.();
