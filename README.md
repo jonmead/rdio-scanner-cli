@@ -65,6 +65,10 @@ CLI arguments override config file values. See [CONFIG.md](CONFIG.md) for the fu
 {
   "server": "ws://192.168.1.10:3000",
   "pin": null,
+  "monitor": [
+    { "system": 1, "talkgroups": [100, 200] },
+    { "system": 2 }
+  ],
   "interactive": false,
   "audio": { "volume": 80 },
   "plugins": ["./src/plugins/rpi-lcd.js"]
@@ -264,8 +268,8 @@ Usage: rdio-scanner-cli [<server-url>] [options]
 |------|-------|-------------|---------|
 | `--config <path>` | `-c` | Path to config file | `./config.json` |
 | `--pin <code>` | `-p` | Access code for restricted servers | — |
-| `--system <id>` | `-s` | Pre-filter live feed to one system ID | — |
-| `--talkgroup <id>` | `-t` | Pre-filter live feed to one talkgroup ID | — |
+| `--system <id>` | `-s` | Pre-filter search results to one system ID | — |
+| `--talkgroup <id>` | `-t` | Pre-filter search results to one talkgroup ID | — |
 | `--interactive` | | Run the full TUI | off |
 | `--no-audio` | | Disable audio playback | off |
 | `--player <cmd>` | | Force a specific audio player | auto-detect |
@@ -309,8 +313,9 @@ node index.js --search
 # Metadata only — no audio, pipe JSON to jq
 node index.js --no-audio | jq -r '[.tgLabel, .systemLabel] | @tsv'
 
-# Monitor a single system in the TUI
-node index.js --interactive --system 4
+# Monitor specific systems/talkgroups (set in config.json)
+# "monitor": [{ "system": 1, "talkgroups": [100, 200] }, { "system": 2 }]
+node index.js --interactive
 
 # Load a hardware display plugin
 node index.js --plugin ./src/plugins/rpi-lcd.js

@@ -4,8 +4,8 @@
   "server": "ws://server:3000",
   "pin": null,
 
-  "systems": null,
-  "talkgroups": null,
+  "_comment_monitor": "monitor: which system/talkgroup pairs to subscribe to. null = receive everything. Each entry requires 'system' (ID). 'talkgroups' is optional — omit it to receive all talkgroups in that system. Talkgroup IDs are scoped to their system, so the same ID on different systems is handled correctly.",
+  "monitor": null,
 
   "interactive": false,
   "search": false,

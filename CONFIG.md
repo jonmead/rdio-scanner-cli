@@ -31,8 +31,10 @@ For `plugins`, the two lists are **merged** (config entries first, CLI entries a
   "server": "ws://192.168.1.10:3000",
   "pin": null,
 
-  "systems": [1, 2, 5],
-  "talkgroups": null,
+  "monitor": [
+    { "system": 1, "talkgroups": [100, 200, 350] },
+    { "system": 2 }
+  ],
 
   "interactive": false,
   "search": false,
@@ -90,39 +92,56 @@ Access code for servers that require authentication. Sent automatically on conne
 
 ---
 
-### `systems`
+### `monitor`
 
 | | |
 |---|---|
-| Type | `number[] \| null` |
-| Default | `null` (all systems) |
+| Type | `object[] \| null` |
+| Default | `null` (subscribe to everything) |
 | CLI equivalent | none — config-only |
 
-Array of numeric system IDs to subscribe to. All other systems are ignored.
-`null` or an empty array subscribes to **all** systems.
+Controls which system/talkgroup combinations the application subscribes to. Set to `null` (or omit the field) to receive all calls from all systems.
+
+When set, each entry in the array specifies a system and optionally a list of talkgroup IDs within that system:
 
 ```json
-"systems": [1, 3, 7]
+"monitor": [
+  { "system": 1, "talkgroups": [100, 200, 350] },
+  { "system": 2 }
+]
 ```
 
----
+Each entry:
 
-### `talkgroups`
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `system` | `number` | Yes | Numeric system ID to subscribe to |
+| `talkgroups` | `number[]` | No | Talkgroup IDs within this system to subscribe to. Omit (or set to `null`) to subscribe to **all** talkgroups in the system. |
 
-| | |
-|---|---|
-| Type | `number[] \| null` |
-| Default | `null` (all talkgroups) |
-| CLI equivalent | none — config-only |
+> **Why `monitor` instead of flat `systems`/`talkgroups` lists?**
+> Talkgroup IDs are **not unique across systems** — system 1 and system 2 can both have a talkgroup with ID 100, representing entirely different channels. A flat list of talkgroup IDs is ambiguous. The `monitor` format pairs each talkgroup ID with its system, making the intent unambiguous.
 
-Array of numeric talkgroup IDs to subscribe to across all systems. All other talkgroups are ignored.
-`null` or an empty array subscribes to **all** talkgroups.
+**Examples:**
 
+Subscribe to specific talkgroups on system 1, and all talkgroups on system 2:
 ```json
-"talkgroups": [100, 200, 350]
+"monitor": [
+  { "system": 1, "talkgroups": [100, 200] },
+  { "system": 2 }
+]
 ```
 
-> **Tip:** `systems` and `talkgroups` filters are applied together. A call is accepted only if its system ID is in `systems` (when set) **and** its talkgroup ID is in `talkgroups` (when set).
+Subscribe to all talkgroups on system 3 only:
+```json
+"monitor": [
+  { "system": 3 }
+]
+```
+
+Subscribe to everything (default):
+```json
+"monitor": null
+```
 
 ---
 
@@ -283,7 +302,7 @@ See [`src/plugins/rpi-lcd.js`](src/plugins/rpi-lcd.js) for a fully commented ske
 ```json
 {
   "server": "ws://scanner.local:3000",
-  "systems": [4],
+  "monitor": [{ "system": 4 }],
   "interactive": true,
   "audio": { "volume": 60 }
 }

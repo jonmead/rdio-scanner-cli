@@ -9,6 +9,7 @@ const { AudioPlayer }  = require('./audio');
 const { RdioClient }   = require('./client');
 const { Renderer }     = require('./renderer');
 const { PluginManager } = require('./plugins/loader');
+const { isMonitored }  = require('./config');
 
 class App {
     constructor(args) {
@@ -240,7 +241,7 @@ class App {
         for (const sys of this.systems) {
             map[String(sys.id)] = {};
             for (const tg of (sys.talkgroups || [])) {
-                let active = true;
+                let active = isMonitored(this.args.monitor, sys.id, tg.id);
                 if (this.holdSys !== null && sys.id !== this.holdSys) active = false;
                 if (this.holdTg  !== null && tg.id  !== this.holdTg)  active = false;
                 if (this._isAvoidedSysTg(sys.id, tg.id))              active = false;

@@ -4,6 +4,7 @@ const { CMD_CALL, CMD_CONFIG, CMD_PIN, CMD_VER } = require('./constants');
 const { AudioPlayer } = require('./audio');
 const { RdioClient }  = require('./client');
 const { PluginManager } = require('./plugins/loader');
+const { isMonitored } = require('./config');
 
 /**
  * Non-interactive (daemon) mode — the default when --interactive is not given.
@@ -60,7 +61,8 @@ function daemonMode(args) {
         const map = {};
         for (const sys of systems) {
             map[String(sys.id)] = {};
-            for (const tg of (sys.talkgroups || [])) map[String(sys.id)][String(tg.id)] = true;
+            for (const tg of (sys.talkgroups || []))
+                map[String(sys.id)][String(tg.id)] = isMonitored(args.monitor, sys.id, tg.id);
         }
         client.sendLFM(map);
         process.stderr.write(`Config loaded: ${systems.length} system(s)\n`);
