@@ -1,6 +1,7 @@
 'use strict';
 
 const path = require('path');
+const { buildMonitorMap, isMonitored } = require('../config');
 
 /**
  * PluginManager — loads and dispatches events to display plugins.
@@ -15,24 +16,41 @@ const path = require('path');
  *   destroy()            Called on application exit.
  *
  * All methods are optional — implement only what you need.
+ *
+ * Lifecycle events (init, onStatus, onConfig, destroy) are always dispatched
+ * to every plugin regardless of its monitor filter.
+ *
+ * Call events (onCallStart, onCallEnd, processAudio) are dispatched only when
+ * the call's system/talkgroup matches the plugin's monitor filter (if set).
+ * onCallEnd is only dispatched to plugins that received the matching onCallStart.
  */
 class PluginManager {
     constructor() {
-        this._plugins = [];
+        this._plugins = [];          // [{ instance, monitorMap }]
+        this._callActiveSet = new Set(); // instances that received onCallStart for current call
     }
 
     /**
-     * Load a plugin from a file path.
-     * The file should export a class or an already-constructed object.
-     * @param {string} pluginPath  Absolute or relative path to the plugin file.
+     * Load a plugin from a file path or config entry.
+     *
+     * @param {string|object} entry  File path string, or object with:
+     *   entry.path     {string}       Path to the plugin file.
+     *   entry.monitor  {object[]|null} Optional monitor filter (same format as
+     *                                  the top-level "monitor" config field).
      */
-    load(pluginPath) {
+    load(entry) {
+        const pluginPath = typeof entry === 'string' ? entry : entry.path;
+        const monitorMap = (typeof entry === 'object' && entry.monitor)
+            ? buildMonitorMap(entry.monitor)
+            : null;
+
         const resolved = path.resolve(pluginPath);
         try {
             const exported = require(resolved);
             const instance = typeof exported === 'function' ? new exported() : exported;
-            this._plugins.push(instance);
-            process.stderr.write(`[plugin] Loaded: ${resolved}\n`);
+            this._plugins.push({ instance, monitorMap });
+            const filterNote = monitorMap ? ` (filtered: ${monitorMap.size} system(s))` : '';
+            process.stderr.write(`[plugin] Loaded: ${resolved}${filterNote}\n`);
             return instance;
         } catch (err) {
             process.stderr.write(`[plugin] Failed to load ${pluginPath}: ${err.message}\n`);
@@ -41,16 +59,44 @@ class PluginManager {
     }
 
     /**
-     * Dispatch an event to all loaded plugins.
-     * Errors in individual plugins are caught and logged so one bad plugin
-     * cannot crash the whole application.
+     * Dispatch an event to plugins.
+     *
+     * Lifecycle events (init, onStatus, onConfig, destroy) go to all plugins.
+     * onCallStart is filtered by each plugin's monitor; the set of plugins that
+     * receive it is recorded so onCallEnd can be sent to the same set only.
+     * onCallEnd is sent only to plugins that received the current onCallStart.
      */
     emit(event, ...args) {
-        for (const plugin of this._plugins) {
-            try {
-                if (typeof plugin[event] === 'function') plugin[event](...args);
-            } catch (err) {
-                process.stderr.write(`[plugin] Error in ${event}: ${err.message}\n`);
+        if (event === 'onCallStart') {
+            const call = args[0];
+            this._callActiveSet.clear();
+            for (const { instance, monitorMap } of this._plugins) {
+                if (!isMonitored(monitorMap, call.system, call.talkgroup)) continue;
+                this._callActiveSet.add(instance);
+                try {
+                    if (typeof instance.onCallStart === 'function') instance.onCallStart(call);
+                } catch (err) {
+                    process.stderr.write(`[plugin] Error in onCallStart: ${err.message}\n`);
+                }
+            }
+        } else if (event === 'onCallEnd') {
+            for (const { instance } of this._plugins) {
+                if (!this._callActiveSet.has(instance)) continue;
+                try {
+                    if (typeof instance.onCallEnd === 'function') instance.onCallEnd();
+                } catch (err) {
+                    process.stderr.write(`[plugin] Error in onCallEnd: ${err.message}\n`);
+                }
+            }
+            this._callActiveSet.clear();
+        } else {
+            // Lifecycle events — always dispatch to all plugins
+            for (const { instance } of this._plugins) {
+                try {
+                    if (typeof instance[event] === 'function') instance[event](...args);
+                } catch (err) {
+                    process.stderr.write(`[plugin] Error in ${event}: ${err.message}\n`);
+                }
             }
         }
     }
@@ -63,21 +109,26 @@ class PluginManager {
      * Buffer (synchronous) or a Promise<Buffer> (asynchronous). If a plugin
      * returns null/undefined or throws, the buffer is passed through unchanged.
      *
+     * Plugins whose monitor filter excludes this call are skipped.
+     *
      * @param {Buffer|null} buf        Original audio bytes.
      * @param {string}      audioType  MIME type string.
      * @param {object}      call       Enriched call object.
      * @param {function}    done       Callback invoked with the final Buffer.
      */
     runAudioPipeline(buf, audioType, call, done) {
-        const processors = this._plugins.filter(p => typeof p.processAudio === 'function');
+        const processors = this._plugins.filter(({ instance, monitorMap }) =>
+            typeof instance.processAudio === 'function' &&
+            isMonitored(monitorMap, call.system, call.talkgroup)
+        );
         if (processors.length === 0 || !buf) { done(buf); return; }
 
         let idx = 0;
         const next = (current) => {
             if (idx >= processors.length) { done(current); return; }
-            const plugin = processors[idx++];
+            const { instance } = processors[idx++];
             try {
-                const result = plugin.processAudio(current, audioType, call);
+                const result = instance.processAudio(current, audioType, call);
                 if (result && typeof result.then === 'function') {
                     result
                         .then(newBuf => next(newBuf ?? current))
@@ -100,6 +151,7 @@ class PluginManager {
     destroy() {
         this.emit('destroy');
         this._plugins = [];
+        this._callActiveSet.clear();
     }
 
     get count() { return this._plugins.length; }
