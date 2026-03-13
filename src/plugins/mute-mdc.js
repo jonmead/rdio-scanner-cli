@@ -7,14 +7,20 @@ const { spawn } = require('child_process');
 const { _ext }  = require('../audio');
 
 /**
- * MuteMdcPlugin — detects and mutes MDC1200 signaling bursts.
+ * MuteMdcPlugin — detects and mutes MDC1200 bursts and CTCSS reverse bursts.
  *
  * MDC1200 (Motorola Data Communications) is a radio signaling protocol that
  * transmits short data packets over the audio channel as FSK tones at
  * approximately 1200 Hz and 1800 Hz. These bursts appear as audible chirps
  * before and after voice transmissions and can be distracting when monitoring.
  *
- * Algorithm (matches mute_mdc.py):
+ * CTCSS reverse bursts (PL inversion) are brief pure tones that a transmitter
+ * sends at key-off — one of the 50 standard CTCSS frequencies (67–254 Hz) —
+ * to snap the receiving squelch shut quickly.  They appear as a short "ker-chunk"
+ * at the end of each transmission.  Unlike MDC, the entire burst is muted with
+ * no chirp preserved.
+ *
+ * MDC algorithm (matches mute_mdc.py):
  *   - Audio is processed in 20 ms chunks.
  *   - Each chunk is analysed with the Goertzel algorithm — an efficient method
  *     for measuring energy at specific frequencies without a full FFT.
@@ -24,6 +30,11 @@ const { _ext }  = require('../audio');
  *     so the characteristic click is preserved; the remainder is attenuated.
  *   - An extension tail (muteExtension × 20 ms) mutes non-MDC chunks that
  *     immediately follow a burst, covering the burst's data packet body.
+ *
+ * CTCSS algorithm:
+ *   - Same Goertzel approach, probing all 50 CTCSS frequencies per chunk.
+ *   - On detection, muting starts immediately (no chirp window).
+ *   - plMuteExtension chunks are muted after the tone drops to cover residual noise.
  *
  * For WAV audio (the format rdio-scanner sends) processing is done natively in
  * Node.js with no external dependencies. For other formats the plugin
@@ -137,6 +148,48 @@ function goertzel(samples, freq, sampleRate) {
 // MDC1200 lower tone ≈ 1200 Hz, upper tone ≈ 1800 Hz.
 const MDC_PROBE_FREQS = [1150, 1200, 1250, 1750, 1800, 1850];
 
+// All 50 standard CTCSS (PL) tone frequencies in Hz.
+// A reverse burst fires one of these as a pure tone at transmission end.
+const CTCSS_FREQS = [
+     67.0,  69.3,  71.9,  74.4,  77.0,  79.7,  82.5,  85.4,  88.5,  91.5,
+     94.8,  97.4, 100.0, 103.5, 107.2, 110.9, 114.8, 118.8, 123.0, 127.3,
+    131.8, 136.5, 141.3, 146.2, 151.4, 156.7, 159.8, 162.2, 165.5, 167.9,
+    171.3, 173.8, 177.3, 179.9, 183.5, 186.2, 189.9, 192.8, 196.6, 199.5,
+    203.5, 206.5, 210.7, 218.1, 225.7, 229.1, 233.6, 241.8, 250.3, 254.1,
+];
+
+/**
+ * Return true if the chunk looks like a CTCSS reverse burst.
+ *
+ * A PL reverse burst is a brief pure tone at a standard CTCSS frequency
+ * (67–254 Hz) that radios transmit at key-off to snap the receiving squelch
+ * shut quickly.  Because it is a single narrow tone with no voice content,
+ * its Goertzel amplitude at that frequency will dominate the chunk RMS —
+ * exactly as MDC1200 dominates its FSK bands.
+ *
+ * @param {Int16Array} samples
+ * @param {number}     sampleRate
+ * @param {number}     sensitivity  Ratio threshold (default 0.4).
+ */
+function detectCtcss(samples, sampleRate, sensitivity) {
+    const N = samples.length;
+    if (N === 0) return false;
+
+    let sumSq = 0;
+    for (let i = 0; i < N; i++) sumSq += samples[i] * samples[i];
+    const rms = Math.sqrt(sumSq / N);
+    if (rms < 50) return false;  // silence
+
+    let maxAmplitude = 0;
+    for (const f of CTCSS_FREQS) {
+        const energy    = goertzel(samples, f, sampleRate);
+        const amplitude = 2 * Math.sqrt(Math.max(0, energy)) / N;
+        if (amplitude > maxAmplitude) maxAmplitude = amplitude;
+    }
+
+    return (maxAmplitude / rms) > sensitivity;
+}
+
 /**
  * Return true if the chunk looks like an MDC1200 burst.
  *
@@ -175,16 +228,39 @@ function detectMdc(samples, sampleRate, sensitivity) {
 // ─── Core processing ──────────────────────────────────────────────────────────
 
 /**
+ * Attenuate a chunk in-place within the output buffer.
+ * @param {Int16Array} out
+ * @param {number}     pos
+ * @param {Int16Array} chunk
+ * @param {number}     attenuFactor
+ */
+function attenuateChunk(out, pos, chunk, attenuFactor) {
+    for (let i = 0; i < chunk.length; i++) {
+        out[pos + i] = Math.round(chunk[i] * attenuFactor);
+    }
+}
+
+/**
  * Process a mono Int16Array of PCM samples.
- * Returns a new Int16Array with MDC bursts muted.
+ * Returns a new Int16Array with MDC bursts and CTCSS reverse bursts muted.
+ *
+ * MDC handling: preserves a short chirp window at burst start, then mutes.
+ * CTCSS handling: mutes immediately from the first detected reverse-burst chunk
+ *   with no chirp — the goal is to remove the entire squelch tail.
+ *
+ * Both share a single muteCounter; whichever fires last wins the extension.
  *
  * @param {Int16Array} mono
  * @param {number}     sampleRate
- * @param {object}     opts         { sensitivity, chirpChunks, muteExtension, attenuationDb }
+ * @param {object}     opts  { sensitivity, chirpChunks, muteExtension, attenuationDb,
+ *                             plSensitivity, plMuteExtension }
  * @returns {Int16Array}
  */
 function processSamples(mono, sampleRate, opts) {
-    const { sensitivity, chirpChunks, muteExtension, attenuationDb } = opts;
+    const {
+        sensitivity, chirpChunks, muteExtension, attenuationDb,
+        plSensitivity, plMuteExtension,
+    } = opts;
     const chunkSize    = Math.round(sampleRate * 0.020);  // 20 ms
     const attenuFactor = Math.pow(10, -attenuationDb / 20);
     const out          = new Int16Array(mono.length);
@@ -196,11 +272,14 @@ function processSamples(mono, sampleRate, opts) {
     while (pos < mono.length) {
         const end   = Math.min(pos + chunkSize, mono.length);
         const chunk = mono.subarray(pos, end);
-        const isMdc = detectMdc(chunk, sampleRate, sensitivity);
+
+        const isMdc   = detectMdc(chunk, sampleRate, sensitivity);
+        // Only run CTCSS detection when MDC hasn't already claimed this chunk
+        const isCtcss = !isMdc && detectCtcss(chunk, sampleRate, plSensitivity);
 
         if (isMdc) {
             if (muteCounter === 0) {
-                // First chunk of a new burst — start chirp, arm mute tail
+                // First chunk of a new MDC burst — preserve chirp, arm mute tail
                 burstAge    = 1;
                 muteCounter = muteExtension;
                 out.set(chunk, pos);                            // keep audible
@@ -210,16 +289,18 @@ function processSamples(mono, sampleRate, opts) {
                 if (burstAge <= chirpChunks) {
                     out.set(chunk, pos);                        // still in chirp window
                 } else {
-                    for (let i = 0; i < chunk.length; i++) {
-                        out[pos + i] = Math.round(chunk[i] * attenuFactor);
-                    }
+                    attenuateChunk(out, pos, chunk, attenuFactor);
                 }
             }
+        } else if (isCtcss) {
+            // CTCSS reverse burst — mute immediately, no chirp window.
+            // Extend the mute counter whether we are currently muting or not.
+            muteCounter = Math.max(muteCounter, plMuteExtension);
+            burstAge    = 0;
+            attenuateChunk(out, pos, chunk, attenuFactor);
         } else if (muteCounter > 0) {
-            // Mute the tail following a burst
-            for (let i = 0; i < chunk.length; i++) {
-                out[pos + i] = Math.round(chunk[i] * attenuFactor);
-            }
+            // Tail mute following MDC or CTCSS burst
+            attenuateChunk(out, pos, chunk, attenuFactor);
             muteCounter--;
             if (muteCounter === 0) burstAge = 0;
         } else {
@@ -239,7 +320,7 @@ function processSamples(mono, sampleRate, opts) {
 class MuteMdcPlugin {
     /**
      * @param {object} [options]
-     * @param {number} [options.sensitivity=0.5]
+     * @param {number} [options.sensitivity=0.9]
      *   MDC detection threshold.  This is the ratio of the dominant MDC-frequency
      *   amplitude to the chunk RMS.  For a pure MDC tone the ratio is ≈ 1.4;
      *   for typical voice audio it is < 0.3.  Lower values are more aggressive.
@@ -253,13 +334,23 @@ class MuteMdcPlugin {
      * @param {number} [options.attenuationDb=50]
      *   Attenuation applied to muted chunks in dB.  Matches Python's `-= 50`
      *   which attenuates pydub AudioSegment loudness by 50 dBFS.
+     * @param {number} [options.plSensitivity=0.4]
+     *   CTCSS reverse-burst detection threshold.  Same ratio metric as
+     *   `sensitivity` but applied across the 50 standard CTCSS frequencies
+     *   (67–254 Hz).  A pure reverse burst scores ≈ 1.0–1.4; voice rarely
+     *   produces a dominant narrow tone in this band.  Lower = more aggressive.
+     * @param {number} [options.plMuteExtension=10]
+     *   Chunks to keep muted after the CTCSS signal drops (10 × 20 ms = 200 ms),
+     *   covering any residual squelch noise that follows the reverse burst.
      */
     constructor(options = {}) {
-        this.sensitivity   = options.sensitivity   ?? Number(process.env.MUTE_MDC_SENSITIVITY ?? 0.9);
-        this.chirpChunks   = options.chirpChunks   ?? 2;
-        this.muteExtension = options.muteExtension ?? 12;
-        this.attenuationDb = options.attenuationDb ?? 50;
-        this.log           = require('../logger').child({ label: 'mute-mdc' });
+        this.sensitivity    = options.sensitivity    ?? Number(process.env.MUTE_MDC_SENSITIVITY ?? 1.1);
+        this.chirpChunks    = options.chirpChunks    ?? 2;
+        this.muteExtension  = options.muteExtension  ?? 12;
+        this.attenuationDb  = options.attenuationDb  ?? 50;
+        this.plSensitivity  = options.plSensitivity  ?? 0.4;
+        this.plMuteExtension = options.plMuteExtension ?? 10;
+        this.log            = require('../logger').child({ label: 'mute-mdc' });
     }
 
     init(config, logger) {
@@ -305,10 +396,12 @@ class MuteMdcPlugin {
         }
 
         const processed = processSamples(mono, sampleRate, {
-            sensitivity:   this.sensitivity,
-            chirpChunks:   this.chirpChunks,
-            muteExtension: this.muteExtension,
-            attenuationDb: this.attenuationDb,
+            sensitivity:     this.sensitivity,
+            chirpChunks:     this.chirpChunks,
+            muteExtension:   this.muteExtension,
+            attenuationDb:   this.attenuationDb,
+            plSensitivity:   this.plSensitivity,
+            plMuteExtension: this.plMuteExtension,
         });
 
         return buildWav(processed, sampleRate);
